@@ -209,6 +209,7 @@ def writeToIniFile(id, value):
     with open('constants_pv_charging.ini', 'w', encoding="utf-8") as configfile:
         config.write(configfile)
 
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
@@ -278,5 +279,6 @@ def setampere():
     return ""
 
 if __name__ == '__main__':
-    print("Hello")
     app.run(port=5000)
+    #from waitress import serve
+    #serve(app, host="0.0.0.0", port=5000)
