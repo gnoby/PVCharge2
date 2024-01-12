@@ -5,6 +5,7 @@ import threading
 from flask import Flask,request,render_template
 
 from pv import read_pv_voltage
+from power import read_haus_stromverbrauch
 from logging.handlers import RotatingFileHandler
 from geopy.geocoders import Nominatim
 from teslapy import Tesla
@@ -39,43 +40,25 @@ def log(value):
     logger.info(value)
 
 def init_tesla():
-    global vehicle_data
-    global tesla
-    with Tesla(config.get('charge', 'tesla_account'), False, False) as tesla:
-        # Token muss in cache.json vorhanden sein. Vorher einfach z.B. gui.py aufrufen und 1x einloggen
-        #tesla.fetch_token()
-        vehicles = tesla.vehicle_list()
-        vehicle_data = vehicles[0].get_vehicle_data()
-        return vehicles[int(0)]
+    global glob_tesla
+    global glob_vehicle
+    tesla = Tesla(config.get('charge', 'tesla_account'), False, False)
+    vehicles = tesla.vehicle_list()
+    glob_vehicle = vehicles[0]
+
 
 def startCharging():
-    log("start aktuell nicht")
-    #with Tesla(config.get('charge', 'tesla_account'), False, False) as tesla:
-    #    vehicles = tesla.vehicle_list()
-    #    vehicle_data = vehicles[0].get_vehicle_data()
-    #    vehicle = vehicles[0]
-    #    if vehicle_data['charge_state']['charging_state'] != 'Charging' and vehicle_data['charge_state']['charging_state'] != 'Complete':
-    #        vehicle.command('START_CHARGE')
-    #        log("Started Charging!")
-    # else:
-    # log("Did not start charging because vehicle was already charging!")
-
-
-def startCharging2():
-    with Tesla(config.get('charge', 'tesla_account'), False, False) as tesla:
-        vehicles = tesla.vehicle_list()
-        vehicle_data = vehicles[0].get_vehicle_data()
-        vehicle = vehicles[0]
+        vehicle = getVehicle()
+        vehicle_data = vehicle.get_vehicle_data()
         if vehicle_data['charge_state']['charging_state'] != 'Charging' and vehicle_data['charge_state']['charging_state'] != 'Complete':
             vehicle.command('START_CHARGE')
             log("Started Charging!")
         else:
             log("Did not start charging because vehicle was already charging!")
 def stopCharging():
-    with Tesla(config.get('charge', 'tesla_account'), False, False) as tesla:
-        vehicles = tesla.vehicle_list()
-        vehicle_data = vehicles[0].get_vehicle_data()
-        vehicle = vehicles[0]
+
+        vehicle = getVehicle()
+        vehicle_data = vehicle.get_vehicle_data()
         if vehicle_data['charge_state']['charging_state'] == 'Charging':
             vehicle.command('STOP_CHARGE')
             log("stop charging")
@@ -83,11 +66,7 @@ def stopCharging():
             log("Did not stop charging because vehicle was not charging!")
 
 def logStatus():
-    data = vehicle_data
-    #vehicles = tesla.vehicle_list()
-    #data = vehicles[0].get_vehicle_data()
-    #data = vehicles[0].get_vehicle_data()
-    #data = vehicle.get_vehicle_data()
+    data = getVehicle().get_vehicle_data()
     log('Online Current Ampere: ' + str(data['charge_state']['charge_current_request'])
         + ', Charge Energy added: ' + str(data['charge_state']['charge_energy_added'])
         + ', Charge Miles ideal: ' + str(data['charge_state']['charge_miles_added_ideal'])
@@ -109,31 +88,29 @@ def isCarAtHome(vehicle_data):
         return False
     return True
 
-def setChargingAmps(vehicle_data_param, vehicle_param, amps):
-    global vehicle_data
-    global vehicle
-    with Tesla(config.get('charge', 'tesla_account'), False, False) as tesla:
-        vehicles = tesla.vehicle_list()
-        vehicle_data = vehicles[0].get_vehicle_data()
-        vehicle = vehicles[0]
+def setChargingAmps(amps):
+        vehicle = getVehicle()
+        vehicle_data = vehicle.get_vehicle_data()
         if vehicle_data['charge_state']['charge_current_request'] != amps:
             amps = min([amps,16])
             log("Set Charging Amps: " + str(amps))
-            vehicles[0].command('CHARGING_AMPS', charging_amps=amps)
+            vehicle.command('CHARGING_AMPS', charging_amps=amps)
             if amps < 5:
-                vehicles[0].command('CHARGING_AMPS', charging_amps=amps)
+                vehicle.command('CHARGING_AMPS', charging_amps=amps)
         else:
             log("Did not set Charging Amps, weil keine Veraenderung: " + str(amps))
 def tesla_pv_charge_control():
 
+    vehicle = getVehicle()
     # Auto schläft, kann nicht geladen werden
     if vehicle['state'] == "asleep":
         log('Sleeping, can not set charge!')
         return
     # Auto wach
     # Status ausgeben
-    vehicle_data = logStatus()
+    logStatus()
 
+    vehicle_data = vehicle.get_vehicle_data();
     # Auto nicht angesteckt, kann nicht geladen werden
     if vehicle_data['charge_state']['charging_state'] == 'Disconnected':
         log('Charger disconnected, can not set charge!')
@@ -161,32 +138,15 @@ def tesla_pv_charge_control():
     log('Kilowatt PV-Anlage: ' + str(kilowatts) + ' -> Ampere Roundend: ' + str(ampere_rounded) + ', Approx KW:' + str(
         ampere_rounded * (11 / 16)))
     # > 1 Ampere -> Laden
-    if ampere_rounded > config.getint('charge', 'MINIMUM_AMPERE_LEVEL'):
-        startCharging()
-        setChargingAmps(vehicle_data, vehicle, ampere_rounded)
-
-    # <= 1 Ampere -> Lohnt sich nicht (ca. 300 W Grundlast), laden stoppen und etwas warten, damit nicht ständig das Laden gestart und gestoppt wird
-    #else:
-    #    log("Low PV-Power....")
-    #    setChargingAmps(vehicle_data, vehicle, 1)
-    #    time.sleep(config.getint('charge', 'WAIT_SECONDS_AFTER_CHARGE_STOP'))
-    #    pv_voltage = read_pv_voltage()
-    #    ampere_rounded = round(
-    #        kilowatts * config.getint('charge', 'AMPERE_FACTOR1') / config.getint('charge', 'AMPERE_FACTOR2'))
-        # Nur wenn nach Wartezeit immer noch unter 1
-    #    if ampere_rounded <= config.getint('charge', 'MINIMUM_AMPERE_LEVEL'):
-    #        stopCharging(vehicle_data, vehicle)
-    #        log("sleeping after stopcharge " + str(config.getint('charge', 'WAIT_SECONDS_AFTER_CHARGE_STOP')))
-    #        time.sleep(config.getint('charge', 'WAIT_SECONDS_AFTER_CHARGE_STOP'))
-    #    else:
-    #        log("PV-Voltage higher. continue: " + str(pv_voltage))
+    #if ampere_rounded > config.getint('charge', 'MINIMUM_AMPERE_LEVEL'):
+    #    startCharging()
+    setChargingAmps(ampere_rounded)
     print('')
 
 
 
 def background_schleife():
     global config
-    global vehicle
     print("Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     config = configparser.ConfigParser()
     config.read('constants_pv_charging.ini', encoding='utf-8')
@@ -197,7 +157,7 @@ def background_schleife():
     log("start schleife")
 
     # Fahrzeug aus API lesen
-    vehicle = init_tesla()
+    init_tesla()
 
     i = 0
     while True:
@@ -214,8 +174,8 @@ def background_schleife():
             else:
                 log('Pausiert.')
             # Jedes 30. Mal init_tesla aufrufen, da scheinbar irgendwann der token abläuft
-            if i > 10:
-                vehicle = init_tesla()
+            if i > 30:
+                init_tesla()
                 i = 0
                 log("reinit tesla")
 
@@ -223,17 +183,17 @@ def background_schleife():
             log(exception)
             try:
                 if i > 10:
-                    vehicle = init_tesla()
+                    init_tesla()
                     i = 0
                     log("reinit tesla")
             except Exception as exception:
                 log(exception)
 
 def getVehicle():
-    tesla = Tesla(config.get('charge', 'tesla_account'), False, False)
-    vehicles = tesla.vehicle_list()
-    vehicle = vehicles[0]
-    return vehicle
+    return glob_vehicle
+
+def setChargeMaxPercent(percent):
+    getVehicle().command('CHANGE_CHARGE_LIMIT', percent=percent)
 
 def setup_app(app):
 
@@ -244,11 +204,20 @@ def setup_app(app):
 
 setup_app(app)
 
+def writeToIniFile(id, value):
+    config.set('charge', id, value)
+    with open('constants_pv_charging.ini', 'w', encoding="utf-8") as configfile:
+        config.write(configfile)
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
         print(request.form["name"])
         print(request.form["email"])
+
+
+    max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
+    minimum_ampere = config.getint('charge', 'fixed_minimum_ampere')
 
     data = [
         {
@@ -257,16 +226,32 @@ def home():
             'mob': '7736'
         }
     ]
-    return render_template("home.html" , data=data)
+    return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere, data=data)
 
 @app.route('/displaylog')
-def fps():
+def displaylog():
     logfilename = config.get('charge', 'LOG_FILE_NAME')
     resultstring = ""
     for line in reversed(open(logfilename, 'rb').readlines()):
         resultstring += line.rstrip().decode("utf-8") +"'<br/>'"
 
     return resultstring
+
+@app.route('/displaystatus')
+def displaystatus():
+    status = "Status"
+    vehicle = getVehicle()
+    vehicle_data = getVehicle().get_vehicle_data()
+    if vehicle['state'] == "asleep":
+        status = "Auto schläft"
+        return status
+    status = ("Ladezustand: " +vehicle_data['charge_state']['charging_state'] +"<br/>" +
+              "Ladestand: " +str(vehicle_data['charge_state']['battery_level']) +" %<br/>"+
+              "Energie hinzu: " + str(vehicle_data['charge_state']['charge_energy_added']) + " kwh<br/>"+
+              "Leistung PV: " +str(read_pv_voltage()) + " watt<br/>"+
+              "Haus Stromverbrauch: " +str(read_haus_stromverbrauch("http://192.168.178.240/cm?cmnd=status%2010")) +" watt"
+              )
+    return status
 
 @app.route('/buttonstopcharge', methods=["GET", "POST"])
 def buttonstopcharge():
@@ -279,6 +264,18 @@ def buttonstartcharge():
     startCharging()
     return ""
 
+
+@app.route('/setmaxcharge', methods=["GET", "POST"])
+def setmaxcharge():
+    print(request.form)
+    setChargeMaxPercent(int(request.form['max_charge']))
+    return ""
+
+@app.route('/setampere', methods=["GET", "POST"])
+def setampere():
+    print(request.form)
+    writeToIniFile("fixed_minimum_ampere", request.form['ampere'])
+    return ""
 
 if __name__ == '__main__':
     print("Hello")
