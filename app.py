@@ -143,13 +143,6 @@ def tesla_pv_charge_control():
     if not isCarAtHome(vehicle_data):
         return
 
-    # Overwrite-Modus: Laden unabhängig von der PV-Leistung
-    if config.get('charge', 'OVERWRITE_MODE') == 'TRUE':
-        log("Overwrite Modus = true.")
-        startCharging(vehicle_data, vehicle)
-        setChargingAmps(vehicle_data, vehicle, config.getint('charge', 'OVERWRITE_AMPERE'))
-        return
-
     # Hier wird über ein Modul die aktuelle Leistung der PV-Anlage ausgelesen. Bei mir über das Web-Interface Kostal Pico. Dies muss spezifisch angepasst werden.
     pv_voltage = read_pv_voltage()
     kilowatts = pv_voltage / 1000
@@ -169,7 +162,7 @@ def tesla_pv_charge_control():
         ampere_rounded * (11 / 16)))
     # > 1 Ampere -> Laden
     if ampere_rounded > config.getint('charge', 'MINIMUM_AMPERE_LEVEL'):
-        startCharging(vehicle_data, vehicle)
+        startCharging()
         setChargingAmps(vehicle_data, vehicle, ampere_rounded)
 
     # <= 1 Ampere -> Lohnt sich nicht (ca. 300 W Grundlast), laden stoppen und etwas warten, damit nicht ständig das Laden gestart und gestoppt wird
@@ -275,15 +268,16 @@ def fps():
 
     return resultstring
 
-@app.route('/buttonstopcharge')
+@app.route('/buttonstopcharge', methods=["GET", "POST"])
 def buttonstopcharge():
+    print(request)
     stopCharging()
-    return ("Laden Beenden")
+    return ""
 
-@app.route('/buttonstartcharge')
+@app.route('/buttonstartcharge', methods=["GET", "POST"])
 def buttonstartcharge():
     startCharging()
-    return ("Laden Starten")
+    return ""
 
 
 if __name__ == '__main__':

@@ -6,7 +6,45 @@
 </head>
 <script src="{{url_for('static', filename='htmx.min.js')}}"></script>
 
+	<link rel="stylesheet" href="https://code.jquery.com/mobile/1.1.1/jquery.mobile-1.1.1.min.css" />
+	<script src="https://code.jquery.com/jquery-1.7.1.min.js"></script>
+	<script src="https://code.jquery.com/mobile/1.1.1/jquery.mobile-1.1.1.min.js"></script>
+
+	<script>
+		$(document).ready(function()
+		{
+		  $('#slider-0').change(function()
+		  {
+				$.post( "", "max_charge=" +this.value );
+		  });
+		});
+	</script>
 <body>
+<div data-role="page">
+
+	<div data-role="header">
+		<h1>My Title</h1>
+	</div><!-- /header -->
+
+	<div data-role="content">
+		<p>Hello world</p>
+        <a hx-target="#target" hx-get="/buttonstopcharge" href="#" data-role="button" data-icon="delete">Laden beenden</a>
+        <a hx-target="#target" hx-get="/buttonstartcharge" href="#" data-role="button" data-icon="check">Laden starten</a>
+        <a hx-target="#target" hx-post="/buttonstopcharge" href="#" data-role="button" data-icon="check">test</a>
+        <form hx-target="#target" hx-post="/buttonstopcharge">
+           <label for="slider-0">Input slider:</label>
+           <input type="range" hx-target="#target" hx-post="/buttonstopcharge" name="slider" id="slider-0" value="25" min="0" max="100"  />
+        </form>
+        <input
+          type="range"
+          name="value"
+          hx-target="#target"
+          hx-post="/buttonstopcharge">
+        <div hx-get="/displaylog" hx-trigger="every 1s"></div>
+
+	</div><!-- /content -->
+
+</div>
 <h1>
     This is home.html
 </h1>
@@ -25,15 +63,15 @@
     <li>{{item.mob}}</li>
 {% endfor %}
 </ul>
-
-<button class='btn' hx-get="/buttonstopcharge" style="width:100%;height:10%">
+<div id="target"></div>
+<button class='btn' hx-get="/buttonstopcharge" style="width:100%;height:10%" hx-target="#target">
     Laden Beenden
 </button>
-<button class='btn' hx-get="/buttonstartcharge" style="width:100%;height:10%">
+<button class='btn' hx-get="/buttonstartcharge" style="width:100%;height:10%" hx-target="#target">
     Laden Starten
 </button>
 <br/>
 
-<div hx-get="/displaylog" hx-trigger="every 1s"></div>
+
 </body>
 </html>
