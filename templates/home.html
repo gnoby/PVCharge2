@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<script src="{{url_for('static', filename='htmx.min.js')}}"></script>
+
+<body>
+<h1>
+    This is home.html
+</h1>
+
+<form method="post">
+  Nametest: <input name="name"/>
+  <br/><br/>
+  Email: <input name="email"/>
+  <br/><br/>
+  <button type="submit">Submit</button>
+</form>
+<ul>
+{% for item in data %}
+    <li>{{item.name}}</li>
+    <li>{{item.place}}</li>
+    <li>{{item.mob}}</li>
+{% endfor %}
+</ul>
+
+<button class='btn' hx-get="/buttonstopcharge" style="width:100%;height:10%">
+    Laden Beenden
+</button>
+<button class='btn' hx-get="/buttonstartcharge" style="width:100%;height:10%">
+    Laden Starten
+</button>
+<br/>
+
+<div hx-get="/displaylog" hx-trigger="every 1s"></div>
+</body>
+</html>
