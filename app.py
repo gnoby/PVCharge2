@@ -211,6 +211,7 @@ def writeToIniFile(id, value):
 
 
 @app.route("/", methods=["GET", "POST"])
+@app.route("/pvcharge2", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
         print(request.form["name"])
