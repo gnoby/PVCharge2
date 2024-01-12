@@ -10,7 +10,15 @@ from logging.handlers import RotatingFileHandler
 from geopy.geocoders import Nominatim
 from teslapy import Tesla
 
+#from flask_reverse_proxy_fix.middleware import ReverseProxyPrefixFix
+
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+#app.config['REVERSE_PROXY_PATH'] = '/pvcharge2'
+#ReverseProxyPrefixFix(app)
 
 def setuplog():
     global logger
