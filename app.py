@@ -1,24 +1,27 @@
-import configparser, logging, time
-import random
+import configparser
+import logging
+import math
 import threading
-
-from flask import Flask,request,render_template
-
-from pv import read_pv_voltage
-from power import read_haus_stromverbrauch
+import time
 from logging.handlers import RotatingFileHandler
+
+from flask import Flask, request, render_template
 from geopy.geocoders import Nominatim
 from teslapy import Tesla
+#from werkzeug.middleware.proxy_fix import ProxyFix
 
-#from flask_reverse_proxy_fix.middleware import ReverseProxyPrefixFix
+from power import read_haus_stromverbrauch
+from pv import read_pv_voltage
 
-from werkzeug.middleware.proxy_fix import ProxyFix
+# from flask_reverse_proxy_fix.middleware import ReverseProxyPrefixFix
 
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-#app.config['REVERSE_PROXY_PATH'] = '/pvcharge2'
+#app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
+#app.config['REVERSE_PROXY_PATH'] = '/ueberschuss'
 #ReverseProxyPrefixFix(app)
+
+url_power="http://192.168.178.240/cm?cmnd=status%2010"
 
 def setuplog():
     global logger
@@ -64,7 +67,6 @@ def startCharging():
         else:
             log("Did not start charging because vehicle was already charging!")
 def stopCharging():
-
         vehicle = getVehicle()
         vehicle_data = vehicle.get_vehicle_data()
         if vehicle_data['charge_state']['charging_state'] == 'Charging':
@@ -110,6 +112,7 @@ def setChargingAmps(amps):
 def tesla_pv_charge_control():
 
     vehicle = getVehicle()
+
     # Auto schläft, kann nicht geladen werden
     if vehicle['state'] == "asleep":
         log('Sleeping, can not set charge!')
@@ -118,7 +121,7 @@ def tesla_pv_charge_control():
     # Status ausgeben
     logStatus()
 
-    vehicle_data = vehicle.get_vehicle_data();
+    vehicle_data = vehicle.get_vehicle_data()
     # Auto nicht angesteckt, kann nicht geladen werden
     if vehicle_data['charge_state']['charging_state'] == 'Disconnected':
         log('Charger disconnected, can not set charge!')
@@ -128,12 +131,25 @@ def tesla_pv_charge_control():
     if not isCarAtHome(vehicle_data):
         return
 
-    # Hier wird über ein Modul die aktuelle Leistung der PV-Anlage ausgelesen. Bei mir über das Web-Interface Kostal Pico. Dies muss spezifisch angepasst werden.
+    stromverbrauch = read_haus_stromverbrauch(url_power)
+    current_amps = getVehicle().get_vehicle_data()['charge_state']['charge_current_request']
+    ergebnis = stromverbrauch / 687
+    ergebnisceil = math.ceil(ergebnis)
+    amps_neu = current_amps - ergebnisceil
+    # print(round(ergebnis))
+    # print(math.floor(ergebnis))
+    # print(math.ceil(ergebnis))
+    ampere_rounded = max(amps_neu, 1)
+    ampere_rounded = min(ampere_rounded, 16)
+
+    log("Stromverbrauch: " + str(stromverbrauch) + ", Amps_vorher: " + str(current_amps)
+        + ", Ergebnis: " + str(ergebnis) +", ergebnisceil: " +str(ergebnisceil) + ", amps_neu: " + str(amps_neu) + ", amps_rounded: " + str(ampere_rounded))
+
     pv_voltage = read_pv_voltage()
     kilowatts = pv_voltage / 1000
 
-    ampere_rounded = round(
-        kilowatts * config.getint('charge', 'AMPERE_FACTOR1') / config.getint('charge', 'AMPERE_FACTOR2'))
+    #ampere_rounded = round(
+    #    kilowatts * config.getint('charge', 'AMPERE_FACTOR1') / config.getint('charge', 'AMPERE_FACTOR2'))
 
     # Setzen einer minimal Ampere Leistung zu der immer geladen wird, auch wenn nicht genügend Sonne ist.
     if config.getint('charge', 'fixed_minimum_ampere') > 0:
@@ -155,7 +171,6 @@ def tesla_pv_charge_control():
 
 def background_schleife():
     global config
-    print("Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     config = configparser.ConfigParser()
     config.read('constants_pv_charging.ini', encoding='utf-8')
 
@@ -204,7 +219,6 @@ def setChargeMaxPercent(percent):
     getVehicle().command('CHANGE_CHARGE_LIMIT', percent=percent)
 
 def setup_app(app):
-
     # Endlosschleife Aufruf pv_charge_control mit x Sekunden Pause
     download_thread = threading.Thread(target=background_schleife, name="background_schleife")
     download_thread.start()
@@ -219,26 +233,30 @@ def writeToIniFile(id, value):
 
 
 @app.route("/", methods=["GET", "POST"])
-@app.route("/pvcharge2", methods=["GET", "POST"])
+@app.route("/ueberschuss", methods=["GET", "POST"])
+@app.route("/ueberschuss/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
-        print(request.form["name"])
-        print(request.form["email"])
+        if "ampere" in request.form:
+            writeToIniFile("fixed_minimum_ampere", request.form['ampere'])
+        if "max_charge" in request.form:
+            setChargeMaxPercent(int(request.form['max_charge']))
+        if "button_stop_charge" in request.form:
+            stopCharging()
+        if "button_start_charge" in request.form:
+            startCharging()
+        if "displaystatus" in request.form:
+            return displaystatus()
+        if "displaylog" in request.form:
+            return displaylog()
+        return ""
 
 
     max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
     minimum_ampere = config.getint('charge', 'fixed_minimum_ampere')
 
-    data = [
-        {
-            'name': 'Audrin',
-            'place': 'kaka',
-            'mob': '7736'
-        }
-    ]
-    return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere, data=data)
+    return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere)
 
-@app.route('/displaylog')
 def displaylog():
     logfilename = config.get('charge', 'LOG_FILE_NAME')
     resultstring = ""
@@ -247,7 +265,6 @@ def displaylog():
 
     return resultstring
 
-@app.route('/displaystatus')
 def displaystatus():
     status = "Status"
     vehicle = getVehicle()
@@ -259,33 +276,9 @@ def displaystatus():
               "Ladestand: " +str(vehicle_data['charge_state']['battery_level']) +" %<br/>"+
               "Energie hinzu: " + str(vehicle_data['charge_state']['charge_energy_added']) + " kwh<br/>"+
               "Leistung PV: " +str(read_pv_voltage()) + " watt<br/>"+
-              "Haus Stromverbrauch: " +str(read_haus_stromverbrauch("http://192.168.178.240/cm?cmnd=status%2010")) +" watt"
+              "Haus Stromverbrauch: " +str(read_haus_stromverbrauch(url_power)) +" watt"
               )
     return status
-
-@app.route('/buttonstopcharge', methods=["GET", "POST"])
-def buttonstopcharge():
-    print(request)
-    stopCharging()
-    return ""
-
-@app.route('/buttonstartcharge', methods=["GET", "POST"])
-def buttonstartcharge():
-    startCharging()
-    return ""
-
-
-@app.route('/setmaxcharge', methods=["GET", "POST"])
-def setmaxcharge():
-    print(request.form)
-    setChargeMaxPercent(int(request.form['max_charge']))
-    return ""
-
-@app.route('/setampere', methods=["GET", "POST"])
-def setampere():
-    print(request.form)
-    writeToIniFile("fixed_minimum_ampere", request.form['ampere'])
-    return ""
 
 if __name__ == '__main__':
     app.run(port=5000)
