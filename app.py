@@ -136,7 +136,7 @@ def tesla_pv_charge_control():
         return
 
     stromverbrauch = read_haus_stromverbrauch(url_power)
-    current_amps = getVehicle().get_vehicle_data()['charge_state']['charge_current_request']
+    current_amps = vehicle_data['charge_state']['charge_current_request']
     ergebnis = stromverbrauch / ampere_to_watt
     ergebnisceil = math.ceil(ergebnis)
     amps_neu = current_amps - ergebnisceil
@@ -267,7 +267,7 @@ def home():
         return ""
 
 
-    max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
+    max_charge = getVehicle().vehicle_data['charge_state']['charge_limit_soc']
     minimum_ampere = config.getint('charge', 'fixed_minimum_ampere')
 
     return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere)
