@@ -267,7 +267,7 @@ def home():
         return ""
 
 
-    max_charge = getVehicle().vehicle_data['charge_state']['charge_limit_soc']
+    max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
     minimum_ampere = config.getint('charge', 'fixed_minimum_ampere')
 
     return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere)
