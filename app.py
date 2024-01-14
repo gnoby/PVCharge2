@@ -175,7 +175,7 @@ def tesla_pv_charge_control():
 
 def background_schleife():
     global config
-    locale.setlocale(locale.LC_ALL, 'de')
+    locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
     config = configparser.ConfigParser()
     config.read('constants_pv_charging.ini', encoding='utf-8')
 
