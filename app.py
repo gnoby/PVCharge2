@@ -12,7 +12,7 @@ from teslapy import Tesla
 
 from power import read_haus_stromverbrauch
 from pv import read_pv_voltage
-
+import locale
 # from flask_reverse_proxy_fix.middleware import ReverseProxyPrefixFix
 
 
@@ -22,7 +22,7 @@ app = Flask(__name__)
 #ReverseProxyPrefixFix(app)
 
 url_power="http://192.168.178.240/cm?cmnd=status%2010"
-
+ampere_to_watt = 687
 def setuplog():
     global logger
     logger = logging.getLogger('pv_charge_logger')
@@ -82,7 +82,8 @@ def logStatus():
         + ', Charge Miles ideal: ' + str(data['charge_state']['charge_miles_added_ideal'])
         + ', Charge Limit: ' + str(data['charge_state']['charge_limit_soc'])
         + ', Charge Status: ' + str(data['charge_state']['charging_state'])
-        + ', Battery Lvl: ' + str(data['charge_state']['battery_level']))
+        + ', Battery Lvl: ' + str(data['charge_state']['battery_level'])
+        )
     return data
 
 def isCarAtHome(vehicle_data):
@@ -101,14 +102,17 @@ def isCarAtHome(vehicle_data):
 def setChargingAmps(amps):
         vehicle = getVehicle()
         vehicle_data = vehicle.get_vehicle_data()
-        if vehicle_data['charge_state']['charge_current_request'] != amps:
-            amps = min([amps,16])
-            log("Set Charging Amps: " + str(amps))
-            vehicle.command('CHARGING_AMPS', charging_amps=amps)
-            if amps < 5:
+        if vehicle_data['charge_state']['charging_state'] == "Charging":
+            if vehicle_data['charge_state']['charge_current_request'] != amps:
+                amps = min([amps,16])
+                log("Set Charging Amps: " + str(amps))
                 vehicle.command('CHARGING_AMPS', charging_amps=amps)
+                if amps < 5:
+                    vehicle.command('CHARGING_AMPS', charging_amps=amps)
+            else:
+                log("Did not set Charging Amps, weil keine Veraenderung: " + str(amps))
         else:
-            log("Did not set Charging Amps, weil keine Veraenderung: " + str(amps))
+            log("Did not set Charging Amps, weil not charging: " + str(amps))
 def tesla_pv_charge_control():
 
     vehicle = getVehicle()
@@ -133,7 +137,7 @@ def tesla_pv_charge_control():
 
     stromverbrauch = read_haus_stromverbrauch(url_power)
     current_amps = getVehicle().get_vehicle_data()['charge_state']['charge_current_request']
-    ergebnis = stromverbrauch / 687
+    ergebnis = stromverbrauch / ampere_to_watt
     ergebnisceil = math.ceil(ergebnis)
     amps_neu = current_amps - ergebnisceil
     # print(round(ergebnis))
@@ -171,6 +175,7 @@ def tesla_pv_charge_control():
 
 def background_schleife():
     global config
+    locale.setlocale(locale.LC_ALL, 'de')
     config = configparser.ConfigParser()
     config.read('constants_pv_charging.ini', encoding='utf-8')
 
@@ -232,6 +237,11 @@ def writeToIniFile(id, value):
         config.write(configfile)
 
 
+def wakeupcar():
+    getVehicle().sync_wake_up()
+    return ""
+
+
 @app.route("/", methods=["GET", "POST"])
 @app.route("/ueberschuss", methods=["GET", "POST"])
 @app.route("/ueberschuss/", methods=["GET", "POST"])
@@ -249,6 +259,11 @@ def home():
             return displaystatus()
         if "displaylog" in request.form:
             return displaylog()
+        if "displayshortstatus" in request.form:
+            return displayshortstatus()
+        if "button_wakeup" in request.form:
+            return wakeupcar()
+        
         return ""
 
 
@@ -261,24 +276,52 @@ def displaylog():
     logfilename = config.get('charge', 'LOG_FILE_NAME')
     resultstring = ""
     for line in reversed(open(logfilename, 'rb').readlines()):
-        resultstring += line.rstrip().decode("utf-8") +"'<br/>'"
+        resultstring += line.rstrip().decode("utf-8") +"<br/>"
 
     return resultstring
 
 def displaystatus():
-    status = "Status"
-    vehicle = getVehicle()
-    vehicle_data = getVehicle().get_vehicle_data()
-    if vehicle['state'] == "asleep":
-        status = "Auto schläft"
+    try:
+        status = "Status"
+        vehicle = getVehicle()
+        vehicle_data = getVehicle().get_vehicle_data()
+        if vehicle['state'] == "asleep":
+            status = "Auto schläft"
+            return status
+
+        status = ("<table><tr>"+
+                "<td>Ladezustand:</td><td>" + vehicle_data['charge_state']['charging_state'] + "</td></tr>" +
+                  "<tr><td>Ampere:</td><td>" + str(vehicle_data['charge_state']['charge_current_request']) +
+                    " A, " +locale.format_string('%10.0f', vehicle_data['charge_state']['charge_current_request']*ampere_to_watt, grouping=True) +" Watt</td></tr>" +
+                  "<tr><td>Ladestand:</td><td>" + str(vehicle_data['charge_state']['battery_level']) + " %</td></tr>" +
+                  "<tr><td>Energie hinzu:</td><td>" +locale.format_string('%10.2f', vehicle_data['charge_state']['charge_energy_added'], grouping=True)  + " kW</td></tr>" +
+                  "<tr><td>Leistung PV:</td><td>" +locale.format_string('%10.0f', read_pv_voltage(), grouping=True)+ " Watt" + "</td></tr>" +
+                  "<tr><td>Haus Stromverbrauch:</td><td>" + locale.format_string('%10.0f',  read_haus_stromverbrauch(url_power), grouping=True) + " Watt</td></tr>" +
+                "</td></tr></table>"
+                  )
+
         return status
-    status = ("Ladezustand: " +vehicle_data['charge_state']['charging_state'] +"<br/>" +
-              "Ladestand: " +str(vehicle_data['charge_state']['battery_level']) +" %<br/>"+
-              "Energie hinzu: " + str(vehicle_data['charge_state']['charge_energy_added']) + " kwh<br/>"+
-              "Leistung PV: " +str(read_pv_voltage()) + " watt<br/>"+
-              "Haus Stromverbrauch: " +str(read_haus_stromverbrauch(url_power)) +" watt"
-              )
-    return status
+    except Exception as exception:
+        log(exception)
+        return "Fehler"
+def displayshortstatus():
+    try:
+        status = "<h3>"
+        vehicle = getVehicle()
+        vehicle_data = getVehicle().get_vehicle_data()
+        if vehicle['state'] == "asleep":
+            status += "Auto schläft"
+            return status
+        status += ( vehicle_data['charge_state']['charging_state'] + " " +
+                    str(vehicle_data['charge_state']['battery_level']) +"% - " +
+                    str(vehicle_data['charge_state']['charge_current_request']) +"A - Haus " +
+                    locale.format_string('%10.0f',  read_haus_stromverbrauch(url_power), grouping=True) +" W"
+                  )
+
+        return status +"</h3>"
+    except Exception as exception:
+        log(exception)
+        return "Fehler"
 
 if __name__ == '__main__':
     app.run(port=5000)
