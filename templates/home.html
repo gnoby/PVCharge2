@@ -76,7 +76,7 @@
 <body>
 <div data-role="page">
 
-	<div data-role="header" hx-post="" hx-trigger="load, every 5s" hx-vars="displayshortstatus:true"
+	<div data-role="header" hx-post="" hx-trigger="load, every 12s" hx-vars="displayshortstatus:true"
          style="text-align: center">
 	</div><!-- /header -->
 
@@ -93,13 +93,13 @@
 
         <div data-role="collapsible" data-collapsed="false">
             <h5>Status</h5>
-            <div hx-post="" hx-trigger="load, every 5s" hx-vars="displaystatus:true"></div>
+            <div hx-post="" hx-trigger="load, every 11s" hx-vars="displaystatus:true"></div>
         </div>
 
         <div data-role="collapsible" >
             <h5 >Log</h5>
             <a href="#" data-role="button" data-icon="action" id="button_wakeup" >Auto aufwecken</a>
-            <div hx-post="" hx-trigger="load, every 5s" hx-vars="displaylog:true"></div>
+            <div hx-post="" hx-trigger="load, every 20s" hx-vars="displaylog:true"></div>
         </div>
     </div>
 </div>
