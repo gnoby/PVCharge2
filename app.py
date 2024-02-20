@@ -266,8 +266,10 @@ def home():
         
         return ""
 
-
-    max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
+    try:
+        max_charge = getVehicle().get_vehicle_data()['charge_state']['charge_limit_soc']
+    except Exception as exception:
+        max_charge = 0
     minimum_ampere = config.getint('charge', 'fixed_minimum_ampere')
 
     return render_template("home.html" , max_charge=max_charge, minimum_ampere=minimum_ampere)
@@ -284,11 +286,10 @@ def displaystatus():
     try:
         status = "Status"
         vehicle = getVehicle()
-        vehicle_data = getVehicle().get_vehicle_data()
         if vehicle['state'] == "asleep":
             status = "Auto schläft"
             return status
-
+        vehicle_data = vehicle.get_vehicle_data()
         status = ("<table><tr>"+
                 "<td>Ladezustand:</td><td>" + vehicle_data['charge_state']['charging_state'] + "</td></tr>" +
                   "<tr><td>Ampere:</td><td>" + str(vehicle_data['charge_state']['charge_current_request']) +
@@ -303,15 +304,15 @@ def displaystatus():
         return status
     except Exception as exception:
         log(exception)
-        return "Fehler"
+        return exception.__cause__
 def displayshortstatus():
     try:
         status = "<h3>"
         vehicle = getVehicle()
-        vehicle_data = getVehicle().get_vehicle_data()
         if vehicle['state'] == "asleep":
             status += "Auto schläft"
             return status
+        vehicle_data = vehicle.get_vehicle_data()
         status += ( vehicle_data['charge_state']['charging_state'] + " " +
                     str(vehicle_data['charge_state']['battery_level']) +"% - " +
                     str(vehicle_data['charge_state']['charge_current_request']) +"A - Haus " +
@@ -321,7 +322,7 @@ def displayshortstatus():
         return status +"</h3>"
     except Exception as exception:
         log(exception)
-        return "Fehler"
+        return exception.__cause__
 
 if __name__ == '__main__':
     app.run(port=5000)
