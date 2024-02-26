@@ -132,8 +132,8 @@ def tesla_pv_charge_control():
     # Ist das Auto zu Hause?
     if not isCarAtHome(vehicle_data):
         return
-
-    stromverbrauch = read_haus_stromverbrauch(config.get('charge', 'URL_POWER'))
+    url_power = config.get('charge', 'URL_POWER')
+    stromverbrauch = read_haus_stromverbrauch(url_power)
     current_amps = vehicle_data['charge_state']['charge_current_request']
     ergebnis = stromverbrauch / config.getint('charge', 'AMPERE_TO_WATT')
     ergebnisceil = math.ceil(ergebnis)
