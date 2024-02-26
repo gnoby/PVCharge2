@@ -21,8 +21,6 @@ app = Flask(__name__)
 #app.config['REVERSE_PROXY_PATH'] = '/ueberschuss'
 #ReverseProxyPrefixFix(app)
 
-url_power="http://192.168.178.240/cm?cmnd=status%2010"
-ampere_to_watt = 687
 def setuplog():
     global logger
     logger = logging.getLogger('pv_charge_logger')
@@ -135,9 +133,9 @@ def tesla_pv_charge_control():
     if not isCarAtHome(vehicle_data):
         return
 
-    stromverbrauch = read_haus_stromverbrauch(url_power)
+    stromverbrauch = read_haus_stromverbrauch(config.get('charge', 'URL_POWER'))
     current_amps = vehicle_data['charge_state']['charge_current_request']
-    ergebnis = stromverbrauch / ampere_to_watt
+    ergebnis = stromverbrauch / config.getint('charge', 'AMPERE_TO_WATT')
     ergebnisceil = math.ceil(ergebnis)
     amps_neu = current_amps - ergebnisceil
     # print(round(ergebnis))
@@ -293,11 +291,11 @@ def displaystatus():
         status = ("<table><tr>"+
                 "<td>Ladezustand:</td><td>" + vehicle_data['charge_state']['charging_state'] + "</td></tr>" +
                   "<tr><td>Ampere:</td><td>" + str(vehicle_data['charge_state']['charge_current_request']) +
-                    " A, " +locale.format_string('%10.0f', vehicle_data['charge_state']['charge_current_request']*ampere_to_watt, grouping=True) +" Watt</td></tr>" +
+                    " A, " +locale.format_string('%10.0f', vehicle_data['charge_state']['charge_current_request']*config.getint('charge', 'AMPERE_TO_WATT'), grouping=True) +" Watt</td></tr>" +
                   "<tr><td>Ladestand:</td><td>" + str(vehicle_data['charge_state']['battery_level']) + " %</td></tr>" +
                   "<tr><td>Energie hinzu:</td><td>" +locale.format_string('%10.2f', vehicle_data['charge_state']['charge_energy_added'], grouping=True)  + " kW</td></tr>" +
                   "<tr><td>Leistung PV:</td><td>" +locale.format_string('%10.0f', read_pv_voltage(), grouping=True)+ " Watt" + "</td></tr>" +
-                  "<tr><td>Haus Stromverbrauch:</td><td>" + locale.format_string('%10.0f',  read_haus_stromverbrauch(url_power), grouping=True) + " Watt</td></tr>" +
+                  "<tr><td>Haus Stromverbrauch:</td><td>" + locale.format_string('%10.0f',  read_haus_stromverbrauch(config.get('charge', 'URL_POWER')), grouping=True) + " Watt</td></tr>" +
                 "</td></tr></table>"
                   )
 
@@ -316,7 +314,7 @@ def displayshortstatus():
         status += ( vehicle_data['charge_state']['charging_state'] + " " +
                     str(vehicle_data['charge_state']['battery_level']) +"% - " +
                     str(vehicle_data['charge_state']['charge_current_request']) +"A - Haus " +
-                    locale.format_string('%10.0f',  read_haus_stromverbrauch(url_power), grouping=True) +" W"
+                    locale.format_string('%10.0f',  read_haus_stromverbrauch(config.get('charge', 'URL_POWER')), grouping=True) +" W"
                   )
 
         return status +"</h3>"
