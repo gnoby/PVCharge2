@@ -1,0 +1,35 @@
+import requests
+import json
+import http.server
+import socketserver
+from http import HTTPStatus
+
+
+def main():
+    read_haus_stromverbrauch("http://192.168.178.240/cm?cmnd=status%2010")
+
+
+def read_haus_stromverbrauch(url):
+    resp2 = requests.get(url)
+    #print(resp2.content)
+    data = json.loads(resp2.content)
+    #print(data['StatusSNS']['MT631']['Power_cur'])
+    return data['StatusSNS']['MT631']['Power_cur']
+
+
+#if __name__ == "__main__":
+#    main()
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        #result = read_haus_stromverbrauch("http://192.168.178.240/cm?cmnd=status%2010")
+        #print(result)
+        res = read_haus_stromverbrauch("http://192.168.178.239/cm?cmnd=status%2010")
+        print(res)
+        self.send_response(HTTPStatus.OK)
+        self.end_headers()
+        self.wfile.write(str(res).encode() )
+
+
+httpd = socketserver.TCPServer(('', 9112), Handler)
+httpd.serve_forever()
